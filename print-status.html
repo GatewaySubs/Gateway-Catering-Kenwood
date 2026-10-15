@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="robots" content="noindex"/>
+<title>Catering Print Status</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root { --navy:#0F172B; --panel:#16213a; --steel:#496E9B; --frost:#EBEEEF; --accent:#6B9FD4; --muted:rgba(235,238,239,.55);
+          --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --line:rgba(73,110,155,.25); }
+  html, body { min-height:100%; font-family:'DM Sans',sans-serif; background:var(--navy); color:var(--frost); }
+  .wrap { max-width:1100px; margin:0 auto; padding:24px 16px 40px; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding-bottom:16px; border-bottom:1px solid var(--line); }
+  .brand { display:flex; align-items:center; gap:12px; }
+  .logo { width:40px; height:40px; border-radius:10px; background:var(--steel); display:flex; align-items:center; justify-content:center;
+          font-family:'Playfair Display',serif; font-size:20px; color:#fff; }
+  .brand h1 { font-family:'Playfair Display',serif; font-size:20px; color:#fff; }
+  .brand p { font-size:11px; color:var(--accent); letter-spacing:2px; text-transform:uppercase; margin-top:2px; }
+  .updated { font-size:12px; color:var(--muted); }
+  .counts { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:18px 0; }
+  .count { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .count .n { font-size:26px; font-weight:500; color:#fff; }
+  .count .l { font-size:12px; color:var(--muted); margin-top:2px; }
+  .count.bad .n { color:var(--bad); } .count.warn .n { color:var(--warn); } .count.ok .n { color:var(--ok); }
+  .filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  .chip { padding:7px 14px; border-radius:20px; border:1px solid rgba(73,110,155,.45); background:transparent; color:var(--frost);
+          font:inherit; font-size:13px; cursor:pointer; }
+  .chip.on { background:var(--steel); border-color:var(--steel); color:#fff; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; font-size:11px; font-weight:500; color:var(--accent); letter-spacing:1px; text-transform:uppercase; padding:8px 10px; border-bottom:1px solid var(--line); }
+  td { padding:12px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  td.order { color:#fff; font-weight:500; }
+  .sub { font-size:12px; color:var(--muted); margin-top:2px; }
+  .status { display:inline-flex; align-items:center; gap:6px; font-weight:500; white-space:nowrap; }
+  .s-ok { color:var(--ok); } .s-wait { color:var(--frost); } .s-late { color:var(--bad); } .s-changed { color:var(--warn); }
+  .test { font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--accent); border:1px solid var(--accent); border-radius:4px; padding:0 4px; margin-left:6px; }
+  .empty, .msg { text-align:center; color:var(--muted); padding:40px 0; }
+  .gate { max-width:360px; margin:60px auto; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:24px; }
+  .gate label { display:block; font-size:12px; color:var(--accent); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
+  .gate input { width:100%; font:inherit; font-size:16px; padding:12px; border-radius:10px; border:1px solid rgba(73,110,155,.5); background:var(--navy); color:#fff; margin-bottom:12px; }
+  .gate button { width:100%; font:inherit; font-size:16px; padding:12px; border:0; border-radius:10px; background:var(--steel); color:#fff; cursor:pointer; }
+  .err { color:var(--bad); font-size:13px; margin-top:10px; min-height:1em; }
+  .hidden { display:none !important; }
+  @media (max-width:700px) {
+    .counts { grid-template-columns:repeat(2,1fr); }
+    thead { display:none; }
+    table, tbody, tr, td { display:block; width:100%; }
+    tr { background:var(--panel); border:1px solid var(--line); border-radius:12px; margin-bottom:10px; padding:4px 0; }
+    td { border:0; padding:6px 14px; }
+    td[data-l]::before { content:attr(data-l); display:block; font-size:10px; color:var(--accent); letter-spacing:1px; text-transform:uppercase; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">GS</div>
+      <div><h1>Gateway Subs</h1><p>Catering · Print status</p></div>
+    </div>
+    <div class="updated" id="updated"></div>
+  </header>
+
+  <div class="gate hidden" id="gate">
+    <label for="pass">Passcode</label>
+    <input id="pass" type="password" autocomplete="current-password" placeholder="Same as the order builder"/>
+    <button onclick="unlock()">Unlock</button>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div id="main" class="hidden">
+    <div class="counts">
+      <div class="count bad"><div class="n" id="cLate">0</div><div class="l">⏰ Late — not printed</div></div>
+      <div class="count warn"><div class="n" id="cChanged">0</div><div class="l">✏️ Changed — reprint</div></div>
+      <div class="count"><div class="n" id="cWait">0</div><div class="l">🕐 Waiting (under 2 hrs)</div></div>
+      <div class="count ok"><div class="n" id="cOk">0</div><div class="l">✅ Printed</div></div>
+    </div>
+    <div class="filters" id="storeFilters"></div>
+    <div class="filters">
+      <button class="chip" id="onlyProblems" onclick="toggleProblems()">Only show problems</button>
+    </div>
+    <table>
+      <thead><tr><th>Store</th><th>Order</th><th>Event</th><th>Sent to store</th><th>Status</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty hidden" id="empty">Nothing to show.</div>
+  </div>
+  <div class="msg" id="loading">Loading…</div>
+</div>
+
+<script>
+const API = 'https://xmewmjzaeltegqsvzrqh.supabase.co/functions/v1/print-tracker';
+const $ = id => document.getElementById(id);
+let orders = [], store = 'All', problemsOnly = false;
+
+function getPass() { try { return localStorage.getItem('gw-status-pass') || ''; } catch (e) { return ''; } }
+function setPass(p) { try { localStorage.setItem('gw-status-pass', p); } catch (e) {} }
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+const STATUS = {
+  late:    { icon: '⏰', label: 'Not printed', cls: 's-late',    rank: 0 },
+  changed: { icon: '✏️', label: 'Changed — reprint', cls: 's-changed', rank: 1 },
+  waiting: { icon: '🕐', label: 'Waiting', cls: 's-wait',    rank: 2 },
+  printed: { icon: '✅', label: 'Printed', cls: 's-ok',      rank: 3 },
+};
+
+async function load() {
+  const pass = getPass();
+  if (!pass) return showGate();
+  try {
+    const r = await fetch(`${API}?action=list`, { headers: { 'X-Staff-Key': pass } });
+    if (r.status === 401) { setPass(''); return showGate('Wrong passcode.'); }
+    const d = await r.json();
+    orders = d.orders || [];
+    $('loading').classList.add('hidden'); $('gate').classList.add('hidden'); $('main').classList.remove('hidden');
+    $('updated').textContent = 'Updated ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ' · refreshes every minute';
+    render();
+  } catch (e) {
+    $('loading').textContent = 'Could not load. Check your connection.';
+  }
+}
+
+function showGate(msg) {
+  $('loading').classList.add('hidden'); $('main').classList.add('hidden'); $('gate').classList.remove('hidden');
+  $('err').textContent = msg || '';
+  $('pass').focus();
+}
+function unlock() { const p = $('pass').value.trim(); if (!p) return; setPass(p); $('loading').classList.remove('hidden'); $('gate').classList.add('hidden'); load(); }
+$('pass').addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
+
+function toggleProblems() { problemsOnly = !problemsOnly; $('onlyProblems').classList.toggle('on', problemsOnly); render(); }
+function pickStore(s) { store = s; render(); }
+
+function render() {
+  const stores = ['All', ...Array.from(new Set(orders.map(o => o.store))).sort()];
+  $('storeFilters').innerHTML = stores.map(s => `<button class="chip ${s === store ? 'on' : ''}" onclick="pickStore('${esc(s)}')">${esc(s)}</button>`).join('');
+
+  const inStore = orders.filter(o => store === 'All' || o.store === store);
+  const count = k => inStore.filter(o => o.status === k).length;
+  $('cLate').textContent = count('late'); $('cChanged').textContent = count('changed');
+  $('cWait').textContent = count('waiting'); $('cOk').textContent = count('printed');
+
+  const list = inStore
+    .filter(o => !problemsOnly || o.status === 'late' || o.status === 'changed')
+    .sort((a, b) => STATUS[a.status].rank - STATUS[b.status].rank || String(a.event_start).localeCompare(String(b.event_start)));
+
+  $('empty').classList.toggle('hidden', list.length > 0);
+  $('rows').innerHTML = list.map(o => {
+    const s = STATUS[o.status];
+    let detail = '';
+    if (o.status === 'printed') detail = `by ${esc(o.printed_by)}, ${esc(o.printed_at)}`;
+    else if (o.status === 'late') detail = o.nudged_at ? `reminder sent ${esc(o.nudged_at)}` : 'over 2 hours';
+    else if (o.status === 'changed') detail = `changed ${esc(o.sent_at)}`;
+    return `<tr>
+      <td data-l="Store">${esc(o.store)}${o.is_test ? '<span class="test">test</span>' : ''}</td>
+      <td data-l="Order" class="order">${esc(o.summary)}</td>
+      <td data-l="Event">${esc(o.when)}</td>
+      <td data-l="Sent to store">${esc(o.sent_at)}</td>
+      <td data-l="Status"><span class="status ${s.cls}">${s.icon} ${s.label}</span>${detail ? `<div class="sub">${detail}</div>` : ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+load();
+setInterval(() => { if (getPass() && !$('main').classList.contains('hidden')) load(); }, 60000);
+</script>
+</body>
+</html>
