@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Gateway Subs — Order Printed</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  :root { --navy:#0F172B; --steel:#496E9B; --frost:#EBEEEF; --accent:#6B9FD4; --green:#4ade80; }
+  html, body { min-height:100%; font-family:'DM Sans',sans-serif; background:var(--navy); color:var(--frost); }
+  .wrap { max-width:420px; margin:0 auto; padding:28px 16px; }
+  .brand { display:flex; align-items:center; gap:12px; margin-bottom:28px; }
+  .logo { width:40px; height:40px; border-radius:10px; background:var(--steel); display:flex; align-items:center; justify-content:center;
+          font-family:'Playfair Display',serif; font-size:20px; color:#fff; }
+  .brand h1 { font-family:'Playfair Display',serif; font-size:19px; color:#fff; }
+  .brand p { font-size:11px; color:var(--accent); letter-spacing:2px; text-transform:uppercase; margin-top:2px; }
+  .card { background:rgba(73,110,155,.12); border:1px solid rgba(73,110,155,.35); border-radius:16px; padding:22px; }
+  .tag { font-size:11px; color:var(--accent); letter-spacing:2px; text-transform:uppercase; margin-bottom:8px; }
+  .title { font-family:'Playfair Display',serif; font-size:24px; color:#fff; line-height:1.25; margin-bottom:6px; }
+  .when { font-size:15px; color:rgba(235,238,239,.75); margin-bottom:22px; }
+  label { display:block; font-size:12px; color:var(--accent); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
+  input { width:100%; font:inherit; font-size:18px; padding:14px; border-radius:10px; border:1px solid rgba(73,110,155,.5);
+          background:rgba(15,23,43,.6); color:#fff; margin-bottom:14px; }
+  button { width:100%; font:inherit; font-size:18px; font-weight:500; padding:16px; border:0; border-radius:12px;
+           background:var(--steel); color:#fff; cursor:pointer; }
+  button:disabled { opacity:.5; }
+  .done { text-align:center; }
+  .done .check { font-size:54px; margin-bottom:8px; }
+  .done .big { font-family:'Playfair Display',serif; font-size:22px; color:#fff; margin-bottom:6px; }
+  .done .small { color:rgba(235,238,239,.7); }
+  .msg { text-align:center; color:rgba(235,238,239,.6); padding:30px 0; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="logo">GS</div>
+    <div><h1>Gateway Subs</h1><p>Catering · Print check</p></div>
+  </div>
+
+  <div class="msg" id="loading">Loading order…</div>
+
+  <div class="card hidden" id="form">
+    <div class="tag" id="store"></div>
+    <div class="title" id="title"></div>
+    <div class="when" id="when"></div>
+    <label for="name">Your name</label>
+    <input id="name" autocomplete="given-name" placeholder="First name"/>
+    <button id="btn" onclick="markPrinted()">✅ Mark as printed</button>
+  </div>
+
+  <div class="card done hidden" id="done">
+    <div class="check">✅</div>
+    <div class="big" id="doneTitle">Printed</div>
+    <div class="small" id="doneText"></div>
+  </div>
+</div>
+
+<script>
+const API = 'https://xmewmjzaeltegqsvzrqh.supabase.co/functions/v1/print-tracker';
+const eventId = new URLSearchParams(location.search).get('event') || '';
+const $ = id => document.getElementById(id);
+
+function savedName() { try { return localStorage.getItem('gw-print-name') || ''; } catch (e) { return ''; } }
+function saveName(n) { try { localStorage.setItem('gw-print-name', n); } catch (e) {} }
+
+function showDone(by, at, already) {
+  $('form').classList.add('hidden');
+  $('done').classList.remove('hidden');
+  $('doneTitle').textContent = already ? 'Already marked printed' : 'Thanks — marked printed';
+  $('doneText').textContent = `By ${by} at ${at}`;
+}
+
+async function load() {
+  try {
+    const r = await fetch(`${API}?action=info&event=${encodeURIComponent(eventId)}`);
+    const d = await r.json();
+    $('loading').classList.add('hidden');
+    if (!r.ok) { $('loading').textContent = 'Could not find this order. Ask the catering manager.'; $('loading').classList.remove('hidden'); return; }
+    if (d.printed_at) return showDone(d.printed_by, d.printed_at, true);
+    $('store').textContent = d.store;
+    $('title').textContent = d.summary;
+    $('when').textContent = d.when;
+    $('name').value = savedName();
+    $('form').classList.remove('hidden');
+  } catch (e) {
+    $('loading').textContent = 'No connection. Try again in a moment.';
+  }
+}
+
+async function markPrinted() {
+  const name = $('name').value.trim();
+  if (!name) { $('name').focus(); return; }
+  saveName(name);
+  $('btn').disabled = true; $('btn').textContent = 'Saving…';
+  try {
+    const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'mark', event_id: eventId, name }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'error');
+    showDone(d.printed_by, d.printed_at, d.already);
+  } catch (e) {
+    $('btn').disabled = false; $('btn').textContent = '✅ Mark as printed';
+    alert('Could not save — please try again.');
+  }
+}
+
+load();
+</script>
+</body>
+</html>
