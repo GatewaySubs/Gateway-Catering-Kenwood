@@ -23,7 +23,7 @@
   .count { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
   .count .n { font-size:26px; font-weight:500; color:#fff; }
   .count .l { font-size:12px; color:var(--muted); margin-top:2px; }
-  .count.bad .n { color:var(--bad); } .count.warn .n { color:var(--warn); } .count.ok .n { color:var(--ok); }
+  .count.bad .n { color:var(--bad); } .count.warn .n { color:var(--warn); } .count.ok .n { color:var(--ok); } .count .n { color:#fff; }
   .filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
   .chip { padding:7px 14px; border-radius:20px; border:1px solid rgba(73,110,155,.45); background:transparent; color:var(--frost);
           font:inherit; font-size:13px; cursor:pointer; }
@@ -34,7 +34,7 @@
   td.order { color:#fff; font-weight:500; }
   .sub { font-size:12px; color:var(--muted); margin-top:2px; }
   .status { display:inline-flex; align-items:center; gap:6px; font-weight:500; white-space:nowrap; }
-  .s-ok { color:var(--ok); } .s-wait { color:var(--frost); } .s-late { color:var(--bad); } .s-changed { color:var(--warn); }
+  .s-ok { color:var(--ok); } .s-wait { color:var(--warn); } .s-late { color:var(--bad); } .s-changed { color:var(--bad); } .s-muted { color:var(--muted); }
   .test { font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--accent); border:1px solid var(--accent); border-radius:4px; padding:0 4px; margin-left:6px; }
   .empty, .msg { text-align:center; color:var(--muted); padding:40px 0; }
   .gate { max-width:360px; margin:60px auto; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:24px; }
@@ -73,8 +73,8 @@
   <div id="main" class="hidden">
     <div class="counts">
       <div class="count bad"><div class="n" id="cLate">0</div><div class="l">⏰ Late — not printed</div></div>
-      <div class="count warn"><div class="n" id="cChanged">0</div><div class="l">✏️ Changed — reprint</div></div>
-      <div class="count"><div class="n" id="cWait">0</div><div class="l">🕐 Waiting (under 2 hrs)</div></div>
+      <div class="count warn"><div class="n" id="cWait">0</div><div class="l">🖨️ Waiting to print</div></div>
+      <div class="count"><div class="n" id="cUpcoming">0</div><div class="l">🗓️ Not due yet</div></div>
       <div class="count ok"><div class="n" id="cOk">0</div><div class="l">✅ Printed</div></div>
     </div>
     <div class="filters" id="storeFilters"></div>
@@ -82,7 +82,7 @@
       <button class="chip" id="onlyProblems" onclick="toggleProblems()">Only show problems</button>
     </div>
     <table>
-      <thead><tr><th>Store</th><th>Order</th><th>Event</th><th>Sent to store</th><th>Status</th></tr></thead>
+      <thead><tr><th>Store</th><th>Order</th><th>Event</th><th>Status</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <div class="empty hidden" id="empty">Nothing to show.</div>
@@ -99,11 +99,13 @@ function getPass() { try { return localStorage.getItem('gw-status-pass') || ''; 
 function setPass(p) { try { localStorage.setItem('gw-status-pass', p); } catch (e) {} }
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
+// Icon/label/detail come from the server; this only sets colour and sort order (problems first).
 const STATUS = {
-  late:    { icon: '⏰', label: 'Not printed', cls: 's-late',    rank: 0 },
-  changed: { icon: '✏️', label: 'Changed — reprint', cls: 's-changed', rank: 1 },
-  waiting: { icon: '🕐', label: 'Waiting', cls: 's-wait',    rank: 2 },
-  printed: { icon: '✅', label: 'Printed', cls: 's-ok',      rank: 3 },
+  late:      { cls: 's-late',    rank: 0 },
+  cancelled: { cls: 's-changed', rank: 1 },
+  waiting:   { cls: 's-wait',    rank: 2 },
+  upcoming:  { cls: 's-muted',   rank: 3 },
+  printed:   { cls: 's-ok',      rank: 4 },
 };
 
 async function load() {
@@ -139,28 +141,20 @@ function render() {
 
   const inStore = orders.filter(o => store === 'All' || o.store === store);
   const count = k => inStore.filter(o => o.status === k).length;
-  $('cLate').textContent = count('late'); $('cChanged').textContent = count('changed');
-  $('cWait').textContent = count('waiting'); $('cOk').textContent = count('printed');
+  $('cLate').textContent = count('late'); $('cWait').textContent = count('waiting');
+  $('cUpcoming').textContent = count('upcoming'); $('cOk').textContent = count('printed');
 
   const list = inStore
-    .filter(o => !problemsOnly || o.status === 'late' || o.status === 'changed')
-    .sort((a, b) => STATUS[a.status].rank - STATUS[b.status].rank || String(a.event_start).localeCompare(String(b.event_start)));
+    .filter(o => !problemsOnly || o.status === 'late' || o.status === 'cancelled' || o.status === 'waiting')
+    .sort((a, b) => (STATUS[a.status]?.rank ?? 9) - (STATUS[b.status]?.rank ?? 9) || String(a.event_start).localeCompare(String(b.event_start)));
 
   $('empty').classList.toggle('hidden', list.length > 0);
-  $('rows').innerHTML = list.map(o => {
-    const s = STATUS[o.status];
-    let detail = '';
-    if (o.status === 'printed') detail = `by ${esc(o.printed_by)}, ${esc(o.printed_at)}`;
-    else if (o.status === 'late') detail = o.nudged_at ? `reminder sent ${esc(o.nudged_at)}` : 'over 2 hours';
-    else if (o.status === 'changed') detail = `changed ${esc(o.sent_at)}`;
-    return `<tr>
-      <td data-l="Store">${esc(o.store)}${o.is_test ? '<span class="test">test</span>' : ''}</td>
+  $('rows').innerHTML = list.map(o => `<tr>
+      <td data-l="Store">${esc(o.store)}${o.test ? '<span class="test">test</span>' : ''}</td>
       <td data-l="Order" class="order">${esc(o.summary)}</td>
       <td data-l="Event">${esc(o.when)}</td>
-      <td data-l="Sent to store">${esc(o.sent_at)}</td>
-      <td data-l="Status"><span class="status ${s.cls}">${s.icon} ${s.label}</span>${detail ? `<div class="sub">${detail}</div>` : ''}</td>
-    </tr>`;
-  }).join('');
+      <td data-l="Status"><span class="status ${STATUS[o.status]?.cls || ''}">${esc(o.icon)} ${esc(o.label)}</span>${o.detail ? `<div class="sub">${esc(o.detail)}</div>` : ''}</td>
+    </tr>`).join('');
 }
 
 load();

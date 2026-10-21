@@ -79,6 +79,7 @@ async function load() {
     const d = await r.json();
     $('loading').classList.add('hidden');
     if (!r.ok) { $('loading').textContent = 'Could not find this order. Ask the catering manager.'; $('loading').classList.remove('hidden'); return; }
+    if (d.cancelled) { $('loading').textContent = `❌ ${d.summary} was removed from the calendar — don't make it. Check with catering if that looks wrong.`; $('loading').classList.remove('hidden'); return; }
     if (d.printed_at) return showDone(d.printed_by, d.printed_at, true);
     $('store').textContent = d.store;
     $('title').textContent = d.summary;
