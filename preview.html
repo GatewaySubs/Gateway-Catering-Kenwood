@@ -131,8 +131,8 @@ const STORE_KEY = 'kenwood';
 const CALENDAR_ID = '664f45bb2acc2f1ded74d6a90f83fbd0a980bd46f732cc825b86160b00af883f@group.calendar.google.com';
 const API_KEY = 'AIzaSyDpukszxx5DgnvW8LTTIZzM3a6dTuqcIEs';
 const STATUS_URL = 'https://xmewmjzaeltegqsvzrqh.supabase.co/functions/v1/print-tracker?action=store_status&store=' + STORE_KEY;
-// Standing orders: shown faded so one-off orders stand out.
-const STANDING = ['duckweed', 'vertical ventures', 'golden isle'];
+// Standing orders with a permanent printout: shown faded so one-off orders stand out. (Duckweed changes, so it isn't one.)
+const STANDING = ['vertical ventures', 'golden isle'];
 const REFRESH_MS = 5 * 60 * 1000;
 const ICON = { printed: '✅', waiting: '🖨️', late: '⏰', upcoming: '' };
 
@@ -189,7 +189,10 @@ const eventsOn = (d) => events.filter((e) => dayKey(e.date) === dayKey(d)).sort(
 // One order as a row: time, name, print status, and buttons.
 function rowHtml(ev) {
   const st = ev.status;
-  const statusHtml = st ? `<span class="status ${st.status}">${ICON[st.status] ? ICON[st.status] + ' ' : ''}${esc(st.label)}</span>`
+  // "Print list 2 days before" only makes sense for orders further out than that.
+  const soon = ev.date < new Date(new Date().setHours(0, 0, 0, 0) + 3 * 864e5);
+  const label = st && st.status === 'upcoming' && soon ? 'Not marked printed' : st && st.label;
+  const statusHtml = st ? `<span class="status ${st.status}">${ICON[st.status] ? ICON[st.status] + ' ' : ''}${esc(label)}</span>`
                         : (isStanding(ev) ? '<span class="status upcoming">Standing order</span>' : '');
   const btns = [
     ev.printout ? `<a class="btn primary" href="${esc(ev.printout)}" target="_blank" rel="noopener">📄 Printout</a>` : '',
