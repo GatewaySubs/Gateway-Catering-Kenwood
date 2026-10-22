@@ -247,7 +247,7 @@ function renderMonth() {
     let html=`<div class="day-num">${dayNum}</div>`;
     evs.slice(0,2).forEach(ev=>{
       const idx=allEvents.indexOf(ev);
-      html+=`<div class="event-chip" onclick="openModalByIndex(event,${idx})">${ev.title}</div>`;
+      html+=`<div class="event-chip" onclick="openModalByIndex(event,${idx})">${ev.attachments&&ev.attachments.length?'📄 ':''}${ev.title}</div>`;
     });
     if(evs.length>2) html+=`<div class="more-events">+${evs.length-2} more</div>`;
     cell.innerHTML=html; grid.appendChild(cell);
@@ -276,7 +276,7 @@ function renderList() {
     item.innerHTML=`
       <div class="list-event-time">${timeStr}</div>
       <div style="flex:1">
-        <div class="list-event-name">${ev.title}${hasAttachments ? ' 📎' : ''}</div>
+        <div class="list-event-name">${ev.title}${hasAttachments ? ' 📄' : ''}</div>
         ${ev.description?`<div class="list-event-desc">${ev.description.substring(0,80)}${ev.description.length>80?'…':''}</div>`:''}
       </div>`;
     item.onclick=()=>openModalByIndex(null,idx); listEl.appendChild(item);
@@ -288,6 +288,9 @@ function changeMonth(dir){currentMonth=new Date(currentMonth.getFullYear(),curre
 function openModalByIndex(e,idx){
   if(e) e.stopPropagation();
   const ev=allEvents[idx]; if(!ev) return;
+  // Orders with a printout attached open the PDF straight away, ready to print.
+  const printout=(ev.attachments||[]).find(a=>a.url);
+  if(printout){window.open(printout.url,'_blank','noopener');return;}
   const d=new Date(ev.allDay?ev.start+'T00:00:00':ev.start);
   document.getElementById('modalTitle').textContent=ev.title;
   document.getElementById('modalDate').textContent=d.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
