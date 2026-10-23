@@ -76,8 +76,15 @@ async function load() {
     const [calRes, statusRes] = await Promise.all([fetch(url), fetch(STATUS_URL).catch(() => null)]);
     if (!calRes.ok) throw new Error('calendar ' + calRes.status);
     const items = (await calRes.json()).items || [];
-    let statuses = [];
-    try { statuses = statusRes && statusRes.ok ? (await statusRes.json()).orders || [] : []; } catch (_) {}
+    let statuses = [], printLive = false;
+    try {
+      const st = statusRes && statusRes.ok ? await statusRes.json() : {};
+      statuses = st.orders || []; printLive = !!st.live;
+    } catch (_) {}
+    // Print status only shows once this store is on the print reminders.
+    document.querySelector('.legend').innerHTML = printLive
+      ? '<span>✅ printed</span><span>🖨️ needs printing</span><span>⏰ late</span><span>📄 has a printout</span>'
+      : '<span>📄 tap an order to open its printout</span>';
     const byKey = new Map(statuses.map((s) => [s.key, s]));
     // Repeating orders can carry a different ID, so fall back to same start time + same name.
     const byTime = new Map(statuses.map((s) => [new Date(s.start).getTime() + '|' + s.summary, s]));
